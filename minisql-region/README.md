@@ -32,6 +32,23 @@ Step 2 adds the local storage layer:
 `flush()` writes full table snapshots to `data.jsonl` and truncates `wal.log`.
 On startup, the engine loads table snapshots first and then replays remaining WAL entries.
 
+Step 3 adds the SQL execution layer:
+
+- `SqlParser` parses a small MiniSQL subset into `SqlCommand`.
+- `SqlExecutor` maps commands to storage operations and always returns `SqlExecutionResult`.
+- `RegionServiceImpl.executeSQL` exposes the executor through the generated Thrift interface and serializes results as JSON strings.
+
+Supported SQL subset:
+
+- `CREATE TABLE table_name (column TYPE [PRIMARY KEY], ...)`
+- `DROP TABLE table_name`
+- `INSERT INTO table_name [(columns...)] VALUES (values...)`
+- `SELECT *|columns FROM table_name [WHERE column = value]`
+- `UPDATE table_name SET column = value [, ...] WHERE column = value`
+- `DELETE FROM table_name WHERE column = value`
+
+Unsupported or invalid SQL returns a JSON failure result instead of escaping as an unchecked exception.
+
 ## Runtime Arguments
 
 Arguments can be passed either as `--key=value` or `--key value`.
@@ -50,4 +67,4 @@ java com.minisql.region.RegionServer --port=9091 --storage=./data/region-9091
 
 ## Next Steps
 
-The following implementation steps will add SQL execution, Thrift RPC, Zookeeper registration, Master heartbeat, and replication. Each step should include focused unit tests before commit.
+The following implementation steps will add Thrift RPC server startup, Zookeeper registration, Master heartbeat, and replication. Each step should include focused unit tests before commit.
