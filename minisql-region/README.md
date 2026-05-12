@@ -80,6 +80,14 @@ Step 6 adds Master heartbeats:
 - `MasterInstructionHandler` records unsupported instructions and ignores them without stopping the heartbeat loop.
 - Master network failures return `false` for that heartbeat and do not affect local storage or Region RPC service.
 
+Step 7 adds the minimal replication path:
+
+- `ReplicationManager` keeps follower endpoints and sends successful mutating SQL to them.
+- `RegionPeerClient` calls follower `RegionService.syncData`.
+- `RegionSyncPayload` includes a `syncId`, `tableName`, and original `sqlStatement`.
+- `RegionServiceImpl` replicates successful `CREATE`, `DROP`, `INSERT`, `UPDATE`, and `DELETE` calls when a replication manager is attached.
+- Follower `syncData` executes the payload locally and records `syncId` values so repeated payloads are idempotent within the process.
+
 ## Runtime Arguments
 
 Arguments can be passed either as `--key=value` or `--key value`.
@@ -100,4 +108,4 @@ java com.minisql.region.RegionServer --port=9091 --storage=./data/region-9091
 
 ## Next Steps
 
-The following implementation steps will add replication and integration coverage. Each step should include focused unit tests before commit.
+The following implementation step will add integration coverage. It should include focused tests before commit.
