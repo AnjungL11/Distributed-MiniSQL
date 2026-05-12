@@ -2,9 +2,14 @@ package com.minisql.region;
 
 import com.minisql.region.config.RegionServerConfig;
 import com.minisql.region.model.RegionServerInfo;
+import com.minisql.region.rpc.RegionRpcServer;
+import com.minisql.region.service.RegionServiceImpl;
+import com.minisql.region.sql.SqlExecutor;
+import com.minisql.region.storage.RegionStorageEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -20,6 +25,8 @@ public class RegionServer implements AutoCloseable {
     private final RegionServerConfig config;
     private final RegionServerInfo serverInfo;
     private final AtomicBoolean running = new AtomicBoolean(false);
+    private RegionStorageEngine storageEngine;
+    private RegionRpcServer rpcServer;
 
     public RegionServer(RegionServerConfig config) {
         this.config = config;
@@ -38,7 +45,17 @@ public class RegionServer implements AutoCloseable {
             logger.info("Region Server already started: {}", serverInfo.getAddress());
             return;
         }
-        logger.info("Region Server started: {}", serverInfo);
+        try {
+            storageEngine = new RegionStorageEngine(config.getStorageRoot());
+            storageEngine.start();
+            SqlExecutor sqlExecutor = new SqlExecutor(storageEngine);
+            rpcServer = new RegionRpcServer(config.getPort(), new RegionServiceImpl(sqlExecutor));
+            rpcServer.start();
+            logger.info("Region Server started: {}", serverInfo);
+        } catch (Exception e) {
+            running.set(false);
+            throw new IllegalStateException("Failed to start Region Server " + serverInfo.getAddress(), e);
+        }
     }
 
     public boolean isRunning() {
@@ -53,9 +70,23 @@ public class RegionServer implements AutoCloseable {
         return serverInfo;
     }
 
+    public RegionStorageEngine getStorageEngine() {
+        return storageEngine;
+    }
+
     @Override
     public void close() {
         if (running.compareAndSet(true, false)) {
+            if (rpcServer != null) {
+                rpcServer.stop();
+            }
+            if (storageEngine != null) {
+                try {
+                    storageEngine.close();
+                } catch (IOException e) {
+                    logger.warn("Failed to close Region storage cleanly", e);
+                }
+            }
             logger.info("Region Server stopped: {}", serverInfo.getAddress());
         }
     }

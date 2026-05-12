@@ -2,20 +2,25 @@ package com.minisql.region;
 
 import com.minisql.region.config.RegionServerConfig;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 
-import java.nio.file.Paths;
+import java.net.ServerSocket;
+import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class RegionServerTest {
+    @TempDir
+    Path tempDir;
+
     @Test
-    void startAndCloseAreIdempotent() {
+    void startAndCloseAreIdempotent() throws Exception {
         RegionServerConfig config = RegionServerConfig.builder()
                 .host("127.0.0.1")
-                .port(9090)
-                .storageRoot(Paths.get("target/region-test"))
+                .port(freePort())
+                .storageRoot(tempDir)
                 .build();
 
         RegionServer server = new RegionServer(config);
@@ -29,5 +34,11 @@ class RegionServerTest {
         server.close();
         server.close();
         assertFalse(server.isRunning());
+    }
+
+    private int freePort() throws Exception {
+        try (ServerSocket socket = new ServerSocket(0)) {
+            return socket.getLocalPort();
+        }
     }
 }

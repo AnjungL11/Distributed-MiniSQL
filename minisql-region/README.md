@@ -49,6 +49,21 @@ Supported SQL subset:
 
 Unsupported or invalid SQL returns a JSON failure result instead of escaping as an unchecked exception.
 
+Step 4 adds the Thrift RPC runtime:
+
+- `RegionRpcServer` starts a `RegionService` processor on the configured port.
+- `RegionServer.start()` now opens local storage, wires `SqlExecutor`, and starts RPC.
+- `RegionServer.close()` stops RPC and flushes storage.
+- `RegionSyncPayload` carries JSON SQL payloads for the current `syncData` contract.
+
+`executeSQL` returns `SqlExecutionResult` JSON. `syncData(tableName, payload)` expects a UTF-8 JSON payload:
+
+```json
+{"tableName":"student","sqlStatement":"INSERT INTO student (id, name) VALUES (1, 'Alice')"}
+```
+
+The replication layer will later decide when and where to send these payloads.
+
 ## Runtime Arguments
 
 Arguments can be passed either as `--key=value` or `--key value`.
@@ -67,4 +82,4 @@ java com.minisql.region.RegionServer --port=9091 --storage=./data/region-9091
 
 ## Next Steps
 
-The following implementation steps will add Thrift RPC server startup, Zookeeper registration, Master heartbeat, and replication. Each step should include focused unit tests before commit.
+The following implementation steps will add Zookeeper registration, Master heartbeat, and replication. Each step should include focused unit tests before commit.
