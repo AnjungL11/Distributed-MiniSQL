@@ -4,7 +4,7 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>com.zju.minisql</groupId>
+    <groupId>com.minisql</groupId>
     <artifactId>distributed-minisql</artifactId>
     <version>1.0-SNAPSHOT</version>
     
@@ -28,6 +28,7 @@
         <curator.version>5.4.0</curator.version> <slf4j.version>1.7.36</slf4j.version>
         <logback.version>1.2.11</logback.version>
         <junit.version>5.9.2</junit.version>
+        <jackson.version>2.15.2</jackson.version>
     </properties>
 
     <dependencyManagement>
@@ -66,14 +67,20 @@
             </dependency>
 
             <dependency>
-                <groupId>com.zju.minisql</groupId>
+                <groupId>com.minisql</groupId>
                 <artifactId>minisql-common</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
-                <groupId>com.zju.minisql</groupId>
+                <groupId>com.minisql</groupId>
                 <artifactId>minisql-rpc</artifactId>
                 <version>${project.version}</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>

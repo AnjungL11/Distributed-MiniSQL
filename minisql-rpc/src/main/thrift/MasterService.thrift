@@ -1,4 +1,4 @@
-namespace java com.zju.minisql.rpc.master
+namespace java com.minisql.rpc.master
 
 // Region 汇报的心跳结构
 struct HeartbeatRequest {

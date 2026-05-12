@@ -1,4 +1,4 @@
-namespace java com.zju.minisql.rpc.region
+namespace java com.minisql.rpc.region
 
 service RegionService {
     // 供 Client 执行具体 SQL
