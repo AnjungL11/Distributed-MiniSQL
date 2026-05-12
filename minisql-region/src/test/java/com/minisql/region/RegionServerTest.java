@@ -21,6 +21,7 @@ class RegionServerTest {
                 .host("127.0.0.1")
                 .port(freePort())
                 .storageRoot(tempDir)
+                .zookeeperEnabled(false)
                 .build();
 
         RegionServer server = new RegionServer(config);

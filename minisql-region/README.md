@@ -64,6 +64,15 @@ Step 4 adds the Thrift RPC runtime:
 
 The replication layer will later decide when and where to send these payloads.
 
+Step 5 adds Zookeeper coordination:
+
+- `RegionZkRegistry` creates an ephemeral node at `/regionservers/[ip:port]`.
+- The znode payload is `RegionHeartbeatState` JSON with node id, endpoint, load score, held tables, and `lastHeartbeatMillis`.
+- A scheduled heartbeat updates the same ephemeral node while the Curator session is alive.
+- `ActiveMasterWatcher` tracks `/active_master` and exposes the latest `host:port` endpoint for later Master RPC heartbeats.
+
+All paths are relative to the Curator namespace `minisql`, matching `docs/zookeeper_design.md`.
+
 ## Runtime Arguments
 
 Arguments can be passed either as `--key=value` or `--key value`.
@@ -73,6 +82,7 @@ Arguments can be passed either as `--key=value` or `--key value`.
 - `--storage`: local storage root. Defaults to `region.storage.path`.
 - `--node-id`: stable node id. Defaults to `host:port`.
 - `--heartbeat-interval-ms`: heartbeat interval used by later Zookeeper/Master tasks.
+- `--zookeeper-enabled`: enable or disable Zookeeper registration. Defaults to `true`.
 
 Example:
 
@@ -82,4 +92,4 @@ java com.minisql.region.RegionServer --port=9091 --storage=./data/region-9091
 
 ## Next Steps
 
-The following implementation steps will add Zookeeper registration, Master heartbeat, and replication. Each step should include focused unit tests before commit.
+The following implementation steps will add Master heartbeat and replication. Each step should include focused unit tests before commit.

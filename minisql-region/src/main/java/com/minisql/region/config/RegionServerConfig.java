@@ -20,6 +20,7 @@ public final class RegionServerConfig {
     private final Path storageRoot;
     private final String nodeId;
     private final int heartbeatIntervalMs;
+    private final boolean zookeeperEnabled;
 
     private RegionServerConfig(Builder builder) {
         this.host = requireText(builder.host, "host");
@@ -31,6 +32,7 @@ public final class RegionServerConfig {
                 ? this.host + ":" + this.port
                 : builder.nodeId.trim();
         this.heartbeatIntervalMs = requirePositive(builder.heartbeatIntervalMs, "heartbeatIntervalMs");
+        this.zookeeperEnabled = builder.zookeeperEnabled;
     }
 
     public static RegionServerConfig defaults() {
@@ -58,6 +60,9 @@ public final class RegionServerConfig {
         if (parsed.containsKey("heartbeat-interval-ms")) {
             builder.heartbeatIntervalMs(Integer.parseInt(parsed.get("heartbeat-interval-ms")));
         }
+        if (parsed.containsKey("zookeeper-enabled")) {
+            builder.zookeeperEnabled(Boolean.parseBoolean(parsed.get("zookeeper-enabled")));
+        }
         return builder.build();
     }
 
@@ -65,11 +70,14 @@ public final class RegionServerConfig {
         String host = NetworkUtil.resolveLocalIpv4();
         int port = ConfigReader.getInt("region.rpc.port", 9090);
         String storagePath = ConfigReader.getString("region.storage.path", "./minisql_data/");
+        boolean zookeeperEnabled = Boolean.parseBoolean(
+                ConfigReader.getString("region.zookeeper.enabled", "true"));
         return new Builder()
                 .host(host)
                 .port(port)
                 .storageRoot(Paths.get(storagePath))
-                .heartbeatIntervalMs(DEFAULT_HEARTBEAT_INTERVAL_MS);
+                .heartbeatIntervalMs(DEFAULT_HEARTBEAT_INTERVAL_MS)
+                .zookeeperEnabled(zookeeperEnabled);
     }
 
     public String getHost() {
@@ -90,6 +98,10 @@ public final class RegionServerConfig {
 
     public int getHeartbeatIntervalMs() {
         return heartbeatIntervalMs;
+    }
+
+    public boolean isZookeeperEnabled() {
+        return zookeeperEnabled;
     }
 
     private static Map<String, String> parseArgs(String[] args) {
@@ -148,6 +160,7 @@ public final class RegionServerConfig {
                 + ", storageRoot=" + storageRoot
                 + ", nodeId='" + nodeId + '\''
                 + ", heartbeatIntervalMs=" + heartbeatIntervalMs
+                + ", zookeeperEnabled=" + zookeeperEnabled
                 + '}';
     }
 
@@ -157,6 +170,7 @@ public final class RegionServerConfig {
         private Path storageRoot;
         private String nodeId;
         private int heartbeatIntervalMs;
+        private boolean zookeeperEnabled;
 
         private Builder() {
         }
@@ -183,6 +197,11 @@ public final class RegionServerConfig {
 
         public Builder heartbeatIntervalMs(int heartbeatIntervalMs) {
             this.heartbeatIntervalMs = heartbeatIntervalMs;
+            return this;
+        }
+
+        public Builder zookeeperEnabled(boolean zookeeperEnabled) {
+            this.zookeeperEnabled = zookeeperEnabled;
             return this;
         }
 

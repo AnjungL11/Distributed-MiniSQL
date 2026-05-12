@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import java.nio.file.Paths;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -17,6 +18,7 @@ class RegionServerConfigTest {
         assertTrue(config.getStorageRoot().endsWith(Paths.get("minisql_data")));
         assertEquals(config.getHost() + ":" + config.getPort(), config.getNodeId());
         assertEquals(RegionServerConfig.DEFAULT_HEARTBEAT_INTERVAL_MS, config.getHeartbeatIntervalMs());
+        assertTrue(config.isZookeeperEnabled());
     }
 
     @Test
@@ -26,7 +28,8 @@ class RegionServerConfigTest {
                 "--port=9191",
                 "--storage=target/region-a",
                 "--node-id=region-a",
-                "--heartbeat-interval-ms=5000"
+                "--heartbeat-interval-ms=5000",
+                "--zookeeper-enabled=false"
         });
 
         assertEquals("10.0.0.8", config.getHost());
@@ -34,6 +37,7 @@ class RegionServerConfigTest {
         assertTrue(config.getStorageRoot().endsWith(Paths.get("target/region-a")));
         assertEquals("region-a", config.getNodeId());
         assertEquals(5000, config.getHeartbeatIntervalMs());
+        assertFalse(config.isZookeeperEnabled());
     }
 
     @Test

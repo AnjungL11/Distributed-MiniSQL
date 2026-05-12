@@ -6,6 +6,9 @@ import com.minisql.region.rpc.RegionRpcServer;
 import com.minisql.region.service.RegionServiceImpl;
 import com.minisql.region.sql.SqlExecutor;
 import com.minisql.region.storage.RegionStorageEngine;
+import com.minisql.common.ZkClient;
+import com.minisql.region.zk.ActiveMasterWatcher;
+import com.minisql.region.zk.RegionZkRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,6 +30,9 @@ public class RegionServer implements AutoCloseable {
     private final AtomicBoolean running = new AtomicBoolean(false);
     private RegionStorageEngine storageEngine;
     private RegionRpcServer rpcServer;
+    private ZkClient zkClient;
+    private RegionZkRegistry zkRegistry;
+    private ActiveMasterWatcher activeMasterWatcher;
 
     public RegionServer(RegionServerConfig config) {
         this.config = config;
@@ -51,6 +57,19 @@ public class RegionServer implements AutoCloseable {
             SqlExecutor sqlExecutor = new SqlExecutor(storageEngine);
             rpcServer = new RegionRpcServer(config.getPort(), new RegionServiceImpl(sqlExecutor));
             rpcServer.start();
+            if (config.isZookeeperEnabled()) {
+                zkClient = new ZkClient();
+                zkClient.start();
+                zkClient.initZkDirectories();
+                zkRegistry = new RegionZkRegistry(
+                        zkClient.getClient(),
+                        serverInfo,
+                        storageEngine::tableNames,
+                        config.getHeartbeatIntervalMs());
+                zkRegistry.start();
+                activeMasterWatcher = new ActiveMasterWatcher(zkClient.getClient(), config.getHeartbeatIntervalMs());
+                activeMasterWatcher.start();
+            }
             logger.info("Region Server started: {}", serverInfo);
         } catch (Exception e) {
             running.set(false);
@@ -77,6 +96,15 @@ public class RegionServer implements AutoCloseable {
     @Override
     public void close() {
         if (running.compareAndSet(true, false)) {
+            if (activeMasterWatcher != null) {
+                activeMasterWatcher.close();
+            }
+            if (zkRegistry != null) {
+                zkRegistry.close();
+            }
+            if (zkClient != null) {
+                zkClient.close();
+            }
             if (rpcServer != null) {
                 rpcServer.stop();
             }
