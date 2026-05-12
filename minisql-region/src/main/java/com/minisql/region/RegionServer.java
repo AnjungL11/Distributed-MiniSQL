@@ -2,6 +2,9 @@ package com.minisql.region;
 
 import com.minisql.region.config.RegionServerConfig;
 import com.minisql.region.model.RegionServerInfo;
+import com.minisql.region.master.MasterClient;
+import com.minisql.region.master.MasterHeartbeatTask;
+import com.minisql.region.master.MasterInstructionHandler;
 import com.minisql.region.rpc.RegionRpcServer;
 import com.minisql.region.service.RegionServiceImpl;
 import com.minisql.region.sql.SqlExecutor;
@@ -33,6 +36,7 @@ public class RegionServer implements AutoCloseable {
     private ZkClient zkClient;
     private RegionZkRegistry zkRegistry;
     private ActiveMasterWatcher activeMasterWatcher;
+    private MasterHeartbeatTask masterHeartbeatTask;
 
     public RegionServer(RegionServerConfig config) {
         this.config = config;
@@ -69,6 +73,16 @@ public class RegionServer implements AutoCloseable {
                 zkRegistry.start();
                 activeMasterWatcher = new ActiveMasterWatcher(zkClient.getClient(), config.getHeartbeatIntervalMs());
                 activeMasterWatcher.start();
+                masterHeartbeatTask = new MasterHeartbeatTask(
+                        new MasterClient(config.getRpcTimeoutMs()),
+                        activeMasterWatcher::getCurrentMaster,
+                        () -> com.minisql.region.model.RegionHeartbeatState.from(
+                                serverInfo,
+                                new java.util.ArrayList<>(storageEngine.tableNames()),
+                                storageEngine.tableNames().size()),
+                        new MasterInstructionHandler(),
+                        config.getHeartbeatIntervalMs());
+                masterHeartbeatTask.start();
             }
             logger.info("Region Server started: {}", serverInfo);
         } catch (Exception e) {
@@ -96,6 +110,9 @@ public class RegionServer implements AutoCloseable {
     @Override
     public void close() {
         if (running.compareAndSet(true, false)) {
+            if (masterHeartbeatTask != null) {
+                masterHeartbeatTask.close();
+            }
             if (activeMasterWatcher != null) {
                 activeMasterWatcher.close();
             }

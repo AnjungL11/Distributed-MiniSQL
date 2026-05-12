@@ -19,6 +19,7 @@ class RegionServerConfigTest {
         assertEquals(config.getHost() + ":" + config.getPort(), config.getNodeId());
         assertEquals(RegionServerConfig.DEFAULT_HEARTBEAT_INTERVAL_MS, config.getHeartbeatIntervalMs());
         assertTrue(config.isZookeeperEnabled());
+        assertEquals(3000, config.getRpcTimeoutMs());
     }
 
     @Test
@@ -29,7 +30,8 @@ class RegionServerConfigTest {
                 "--storage=target/region-a",
                 "--node-id=region-a",
                 "--heartbeat-interval-ms=5000",
-                "--zookeeper-enabled=false"
+                "--zookeeper-enabled=false",
+                "--rpc-timeout-ms=900"
         });
 
         assertEquals("10.0.0.8", config.getHost());
@@ -38,6 +40,7 @@ class RegionServerConfigTest {
         assertEquals("region-a", config.getNodeId());
         assertEquals(5000, config.getHeartbeatIntervalMs());
         assertFalse(config.isZookeeperEnabled());
+        assertEquals(900, config.getRpcTimeoutMs());
     }
 
     @Test

@@ -73,6 +73,13 @@ Step 5 adds Zookeeper coordination:
 
 All paths are relative to the Curator namespace `minisql`, matching `docs/zookeeper_design.md`.
 
+Step 6 adds Master heartbeats:
+
+- `MasterClient` calls the existing `MasterService.sendHeartbeat` Thrift API.
+- `MasterHeartbeatTask` periodically reads the current active master endpoint and sends Region state.
+- `MasterInstructionHandler` records unsupported instructions and ignores them without stopping the heartbeat loop.
+- Master network failures return `false` for that heartbeat and do not affect local storage or Region RPC service.
+
 ## Runtime Arguments
 
 Arguments can be passed either as `--key=value` or `--key value`.
@@ -82,6 +89,7 @@ Arguments can be passed either as `--key=value` or `--key value`.
 - `--storage`: local storage root. Defaults to `region.storage.path`.
 - `--node-id`: stable node id. Defaults to `host:port`.
 - `--heartbeat-interval-ms`: heartbeat interval used by later Zookeeper/Master tasks.
+- `--rpc-timeout-ms`: Thrift client timeout for outbound Region calls. Defaults to `client.rpc.timeout.ms`.
 - `--zookeeper-enabled`: enable or disable Zookeeper registration. Defaults to `true`.
 
 Example:
@@ -92,4 +100,4 @@ java com.minisql.region.RegionServer --port=9091 --storage=./data/region-9091
 
 ## Next Steps
 
-The following implementation steps will add Master heartbeat and replication. Each step should include focused unit tests before commit.
+The following implementation steps will add replication and integration coverage. Each step should include focused unit tests before commit.
