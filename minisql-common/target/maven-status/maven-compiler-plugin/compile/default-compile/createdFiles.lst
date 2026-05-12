@@ -1,0 +1,4 @@
+com\minisql\common\ConfigReader.class
+com\minisql\common\ZkClient.class
+com\minisql\common\ZkConstants.class
+com\minisql\common\RpcExceptionCode.class
