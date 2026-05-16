@@ -1,32 +1,32 @@
 namespace java com.minisql.rpc.master
 
-// Region 汇报的心跳结构
+// Region Server -> Master: heartbeat state.
 struct HeartbeatRequest {
-    1: string regionServerIp,
-    2: i32 port,
-    3: double loadScore,
-    4: list<string> holdingRegions
+    1: string regionServerIp,       // Region RPC host or IP.
+    2: i32 port,                    // Region RPC port.
+    3: double loadScore,               // Lower means lighter load.
+    4: list<string> holdingRegions  // Tables currently held by this Region.
 }
 
 struct HeartbeatResponse {
     1: bool isSuccess,
-    2: string instruction // 例如返回 "MigrateRegion" 等调度指令
+    2: string instruction // Scheduling instruction, e.g. "NONE" or "MigrateRegion".
 }
 
-// Client 获取路由的结构
+// Master -> Client: table routing result.
 struct RoutingResponse {
-    1: bool isSuccess,
+    1: bool isSuccess,       // false means no usable route was found.
     2: string regionServerIp,
     3: i32 port
 }
 
 service MasterService {
-    // 供 Region Server 调用
+    // Called by Region Server.
     HeartbeatResponse sendHeartbeat(1: HeartbeatRequest request);
-    
-    // 供 Client 调用
+
+    // Called by Client. Client caches successful tableName -> Region endpoint mappings.
     RoutingResponse getTableRouting(1: string tableName);
-    
-    // DDL 操作
+
+    // Called by Client before sending CREATE TABLE SQL to Region.
     bool createTable(1: string tableName);
 }
