@@ -4,7 +4,7 @@ namespace java com.minisql.rpc.master
 struct HeartbeatRequest {
     1: string regionServerIp,       // Region RPC host or IP.
     2: i32 port,                    // Region RPC port.
-    3: i32 loadScore,               // Lower means lighter load.
+    3: double loadScore,               // Lower means lighter load.
     4: list<string> holdingRegions  // Tables currently held by this Region.
 }
 
