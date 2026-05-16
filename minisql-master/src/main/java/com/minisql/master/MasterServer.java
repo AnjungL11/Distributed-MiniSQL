@@ -1,10 +1,13 @@
-package com.minisql.master;
+     package com.minisql.master;
 
 import com.minisql.common.ConfigReader;
 import com.minisql.common.ZkClient;
 import com.minisql.common.ZkConstants;
 import com.minisql.rpc.master.MasterService;
 import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.recipes.cache.ChildData;
+import org.apache.curator.framework.recipes.cache.CuratorCache;
+import org.apache.curator.framework.recipes.cache.CuratorCacheListener;
 import org.apache.curator.framework.recipes.leader.LeaderSelector;
 import org.apache.curator.framework.recipes.leader.LeaderSelectorListenerAdapter;
 import org.apache.thrift.server.TServer;
@@ -25,6 +28,8 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
     private final String masterName;
     private final int rpcPort;
     private LeaderSelector leaderSelector;
+    private final ClusterStatusManager clusterStatusManager;
+    private CuratorCache regionDirCache;
     private TServer thriftServer;
 
     public MasterServer() {
@@ -35,6 +40,7 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
         this.masterName = ConfigReader.getString("master.name", "Master-Node-1");
         this.rpcPort = ConfigReader.getInt("master.rpc.port", 8080);
         
+        this.clusterStatusManager = new ClusterStatusManager();
         // 确保 ZK 中的基础目录已经创建
         this.zkClient.initZkDirectories();
         
@@ -75,7 +81,9 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
             
             logger.info("已向集群广播服务地址: {}", activeMasterAddress);
 
-            // 2. 启动对外服务的 Thrift RPC 服务器（此方法会阻塞线程）
+            // 只有当选为 Active Master 的实体，才开启对 Region Server 节点的事件快照同步与监听
+            initRegionDirectoryWatcher();
+            // 2. 启动对外服务的 Thrift RPC 服务器
             startRpcServer();
 
         } catch (InterruptedException e) {
@@ -83,17 +91,46 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
             Thread.currentThread().interrupt();
         } catch (Exception e) {
             logger.error("Active Master 运行期间发生致命异常", e);
-        } finally {
-            // 退出方法意味着让出 Leader 锁，必须关闭对外服务
-            stopRpcServer();
-            logger.info("[{}] 已卸任 Active Master 状态，降级为 Backup。", masterName);
+        } privateWayExit();
+    }
+
+    /**
+     * 开启分布式目录树节点快照监听（感知物理节点动态变动）
+     */
+    private void initRegionDirectoryWatcher() {
+        regionDirCache = CuratorCache.build(zkClient.getClient(), ZkConstants.REGION_SERVERS_ROOT);
+        CuratorCacheListener listener = CuratorCacheListener.builder()
+                .forCreates(childData -> {
+                    String nodeName = parseZNodeName(childData.getPath());
+                    if (!nodeName.isEmpty()) {
+                        clusterStatusManager.addNode(nodeName);
+                    }
+                })
+                .forDeletes(childData -> {
+                    String nodeName = parseZNodeName(childData.getPath());
+                    if (!nodeName.isEmpty()) {
+                        clusterStatusManager.removeNode(nodeName);
+                        // TODO: 待完成扩展触发自动 Failover 逻辑
+                    }
+                })
+                .build();
+        
+        regionDirCache.listenable().addListener(listener);
+        regionDirCache.start();
+        logger.info("集群状态监听器已成功挂载至：{}", ZkConstants.REGION_SERVERS_ROOT);
+    }
+
+    private String parseZNodeName(String path) {
+        if (path.equals(ZkConstants.REGION_SERVERS_ROOT)) {
+            return "";
         }
+        return path.substring(path.lastIndexOf("/") + 1);
     }
 
     private void startRpcServer() throws Exception {
         // 将具体的业务逻辑实现类绑定到 Thrift Processor 上
         MasterService.Processor<MasterServiceImpl> processor = 
-                new MasterService.Processor<>(new MasterServiceImpl(zkClient));
+                new MasterService.Processor<>(new MasterServiceImpl(zkClient, clusterStatusManager));
         
         // 绑定监听端口
         TServerTransport serverTransport = new TServerSocket(rpcPort);
@@ -110,11 +147,20 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
         thriftServer.serve(); // 线程将阻塞在此处，直到服务被 stop()
     }
 
-    private void stopRpcServer() {
+    // private void stopRpcServer() {
+    //     if (thriftServer != null && thriftServer.isServing()) {
+    //         thriftServer.stop();
+    //         logger.info("Master RPC Server 监听已停止。");
+    //     }
+    // }
+    private void privateWayExit() {
+        if (regionDirCache != null) {
+            regionDirCache.close();
+        }
         if (thriftServer != null && thriftServer.isServing()) {
             thriftServer.stop();
-            logger.info("Master RPC Server 监听已停止。");
         }
+        logger.info("[{}] 已平滑交出权限，降级为备份实例。", masterName);
     }
 
     public static void main(String[] args) {

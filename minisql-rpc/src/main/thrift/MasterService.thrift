@@ -4,7 +4,7 @@ namespace java com.minisql.rpc.master
 struct HeartbeatRequest {
     1: string regionServerIp,
     2: i32 port,
-    3: i32 loadScore,
+    3: double loadScore,
     4: list<string> holdingRegions
 }
 
