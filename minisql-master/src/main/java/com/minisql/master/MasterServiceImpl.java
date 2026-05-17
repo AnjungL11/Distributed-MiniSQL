@@ -86,7 +86,7 @@ public class MasterServiceImpl implements MasterService.Iface {
     }
 
     @Override
-    public boolean createTable(String tableName) {
+    public boolean createTable(String tableName, String schemaJson) {
         logger.info("收到 Client 的建表请求: {}", tableName);
         String tablePath = ZkConstants.getTablePath(tableName);
         try {
@@ -96,8 +96,9 @@ public class MasterServiceImpl implements MasterService.Iface {
                 return false;
             }
 
-            // 通过状态管理器挑选当前集群中负载评分最低的在线 Region Server
+            // 挑选负载最低的 Region 节点
             String bestRegionServer = clusterStatusManager.getLowestLoadNode();
+
             if (bestRegionServer == null) {
                 logger.error("建表失败：当前集群中没有可用的在线 Region Server！");
                 return false;
@@ -105,18 +106,24 @@ public class MasterServiceImpl implements MasterService.Iface {
 
             logger.info("负载均衡策略：选择将新表 {} 分配给数据节点 {}", tableName, bestRegionServer);
 
-            // 初始化该表的元数据结构对象
-            TableSchema schema = new TableSchema();
-            schema.setTableName(tableName);
-            schema.setPrimaryKey(bestRegionServer); // 暂时复用该字段标记路由目标服务器
-            // 将对象序列化为 JSON 字符串
-            String jsonSchema = JsonUtil.toJson(schema);
+            // // 初始化该表的元数据结构对象
+            // TableSchema schema = new TableSchema();
+            // schema.setTableName(tableName);
+            // schema.setPrimaryKey(bestRegionServer); // 暂时复用该字段标记路由目标服务器
+            // // 将对象序列化为 JSON 字符串
+            // String jsonSchema = JsonUtil.toJson(schema);
+
+            // 将 Client 传过来的完整 schemaJson 转换回对象
+            TableSchema schema = JsonUtil.fromJson(schemaJson, TableSchema.class);
+
+            // 把 Master 分配的物理节点地址标记进去
+            schema.setPrimaryKey(bestRegionServer);
 
             // 将表结构持久化写入 Zookeeper
             zkClient.getClient().create()
                     .creatingParentsIfNeeded()
                     .withMode(CreateMode.PERSISTENT)
-                    .forPath(tablePath, jsonSchema.getBytes(StandardCharsets.UTF_8));
+                    .forPath(tablePath, JsonUtil.toJson(schema).getBytes(StandardCharsets.UTF_8));
             
             logger.info("成功创建表 {}，拓扑元数据已同步至 Zookeeper", tableName);
             return true;
@@ -125,5 +132,22 @@ public class MasterServiceImpl implements MasterService.Iface {
             logger.error("执行建表逻辑时发生严重异常", e);
             return false;
         }
+    }
+
+    @Override
+    public boolean dropTable(String tableName) {
+        logger.info("收到删表请求: {}", tableName);
+        String tablePath = ZkConstants.getTablePath(tableName);
+        try {
+            if (zkClient.getClient().checkExists().forPath(tablePath) != null) {
+                // 从 ZK 中删除该表的元数据
+                zkClient.getClient().delete().forPath(tablePath);
+                logger.info("表 {} 的元数据已从集群移除", tableName);
+                return true;
+            }
+        } catch (Exception e) {
+            logger.error("删表失败", e);
+        }
+        return false;
     }
 }

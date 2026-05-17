@@ -52,7 +52,9 @@ public class MiniSqlClient implements AutoCloseable {
         try {
             if (statement.getOperation() == SqlOperation.CREATE_TABLE) {
                 tableMetadataResolver.cache(statement.getSchema());
-                createTableMetadata(statement.getTableName());
+                // createTableMetadata(statement.getTableName());
+                // 将解析出的 Schema 传给 Master 进行带字段建表
+                createTableMetadata(statement.getTableName(), statement.getSchema());
             } else {
                 tableMetadataResolver.resolve(statement.getTableName());
             }
@@ -62,6 +64,8 @@ public class MiniSqlClient implements AutoCloseable {
             if (statement.getOperation() == SqlOperation.DROP_TABLE && result.isSuccess()) {
                 metadataCache.invalidateTableRoute(statement.getTableName());
                 tableMetadataResolver.invalidate(statement.getTableName());
+                // 通知 Master 从 Zookeeper 删除表元数据
+                dropTableMetadata(statement.getTableName());
             }
             return result;
         } catch (Exception firstFailure) {
@@ -89,16 +93,29 @@ public class MiniSqlClient implements AutoCloseable {
         tableMetadataResolver.invalidate(tableName);
     }
 
-    private void createTableMetadata(String tableName) throws Exception {
+    private void createTableMetadata(String tableName, TableSchema schema) throws Exception {
         Endpoint master = masterResolver.resolve();
         try {
-            boolean created = masterRpcClient.createTable(master, tableName);
+            String schemaJson = JsonUtil.toJson(schema);
+            boolean created = masterRpcClient.createTable(master, tableName, schemaJson);
             if (!created) {
                 metadataCache.invalidateTableRoute(tableName);
+                throw new IllegalStateException("Master 拒绝建表，可能是该表 (" + tableName + ") 已存在。");
             }
         } catch (Exception e) {
             masterResolver.invalidate();
             throw e;
+        }
+    }
+
+    // 新增删除表元数据的逻辑
+    private void dropTableMetadata(String tableName) {
+        Endpoint master = masterResolver.resolve();
+        try {
+            masterRpcClient.dropTable(master, tableName);
+        } catch (Exception e) {
+            masterResolver.invalidate();
+            System.err.println("Warning: failed to drop metadata on Master for table: " + tableName);
         }
     }
 

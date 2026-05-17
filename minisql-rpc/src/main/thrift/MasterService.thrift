@@ -28,5 +28,10 @@ service MasterService {
     RoutingResponse getTableRouting(1: string tableName);
 
     // Called by Client before sending CREATE TABLE SQL to Region.
-    bool createTable(1: string tableName);
+    # bool createTable(1: string tableName);
+    // 修改为接收两个参数
+    bool createTable(1: string tableName, 2: string schemaJson)
+
+    // 新增删表
+    bool dropTable(1: string tableName)
 }

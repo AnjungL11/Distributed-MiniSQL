@@ -123,7 +123,12 @@ class MasterHeartbeatTaskTest {
         }
 
         @Override
-        public boolean createTable(String tableName) throws TException {
+        public boolean createTable(String tableNam, String schemaJson) throws TException {
+            return false;
+        }
+
+        @Override
+        public boolean dropTable(String tableName) throws TException {
             return false;
         }
     }

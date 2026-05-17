@@ -1,6 +1,8 @@
      package com.minisql.master;
 
 import com.minisql.common.ConfigReader;
+import com.minisql.common.JsonUtil;
+import com.minisql.common.TableSchema;
 import com.minisql.common.ZkClient;
 import com.minisql.common.ZkConstants;
 import com.minisql.rpc.master.MasterService;
@@ -20,6 +22,7 @@ import org.slf4j.LoggerFactory;
 
 import java.net.InetAddress;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 
 public class MasterServer extends LeaderSelectorListenerAdapter {
     private static final Logger logger = LoggerFactory.getLogger(MasterServer.class);
@@ -111,6 +114,30 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
                     if (!nodeName.isEmpty()) {
                         clusterStatusManager.removeNode(nodeName);
                         // TODO: 待完成扩展触发自动 Failover 逻辑
+                        logger.warn("🚨 节点 {} 宕机，开始执行数据表重平衡(Failover)!", nodeName);
+                        
+                        try {
+                            // 遍历 ZK 中所有的表
+                            List<String> tables = zkClient.getClient().getChildren().forPath(ZkConstants.TABLES_ROOT);
+                            for (String tableName : tables) {
+                                String tablePath = ZkConstants.getTablePath(tableName);
+                                byte[] data = zkClient.getClient().getData().forPath(tablePath);
+                                TableSchema schema = JsonUtil.fromJson(new String(data, StandardCharsets.UTF_8), TableSchema.class);
+                                
+                                // 如果发现这个表是分配给那个死掉的节点的
+                                if (nodeName.equals(schema.getPrimaryKey())) {
+                                    // 重新在活着的节点里挑一个最好的
+                                    String newBestNode = clusterStatusManager.getLowestLoadNode();
+                                    if (newBestNode != null) {
+                                        schema.setPrimaryKey(newBestNode); // 重新分配
+                                        zkClient.getClient().setData().forPath(tablePath, JsonUtil.toJson(schema).getBytes(StandardCharsets.UTF_8));
+                                        logger.info("✨ 成功将表 {} 从宕机节点 {} 迁移至健康节点 {}", tableName, nodeName, newBestNode);
+                                    }
+                                }
+                            }
+                        } catch (Exception e) {
+                            logger.error("执行 Failover 失败", e);
+                        }
                     }
                 })
                 .build();
