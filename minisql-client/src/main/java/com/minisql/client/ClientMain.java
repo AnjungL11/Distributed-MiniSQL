@@ -2,7 +2,6 @@ package com.minisql.client;
 
 import com.minisql.client.cli.ResultPrinter;
 import com.minisql.client.model.SqlResult;
-
 import java.util.Scanner;
 
 public class ClientMain {

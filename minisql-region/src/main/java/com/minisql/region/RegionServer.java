@@ -48,6 +48,13 @@ public class RegionServer implements AutoCloseable {
         RegionServer server = new RegionServer(config);
         Runtime.getRuntime().addShutdownHook(new Thread(server::close, "region-server-shutdown"));
         server.start();
+
+        // 挂起主线程，防止它运行结束导致 Maven 强杀后台服务进程
+        try {
+            new java.util.concurrent.CountDownLatch(1).await();
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
     }
 
     public void start() {

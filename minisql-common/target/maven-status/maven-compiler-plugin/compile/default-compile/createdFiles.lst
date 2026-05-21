@@ -1,4 +1,8 @@
-com\minisql\common\ConfigReader.class
+com\minisql\common\ColumnType.class
 com\minisql\common\ZkClient.class
 com\minisql\common\ZkConstants.class
+com\minisql\common\ConfigReader.class
+com\minisql\common\TableSchema.class
+com\minisql\common\JsonUtil.class
+com\minisql\common\ColumnInfo.class
 com\minisql\common\RpcExceptionCode.class

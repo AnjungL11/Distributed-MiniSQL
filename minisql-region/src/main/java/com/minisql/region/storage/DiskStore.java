@@ -13,6 +13,7 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Stream;
 
 public class DiskStore {
     public static final String TABLES_DIR = "tables";
@@ -37,7 +38,7 @@ public class DiskStore {
             return Collections.emptyList();
         }
         List<String> tableNames = new ArrayList<>();
-        try (var stream = Files.list(tablesRoot)) {
+        try (Stream<Path> stream = Files.list(tablesRoot)) {
             stream.filter(Files::isDirectory)
                     .map(path -> path.getFileName().toString())
                     .sorted()
@@ -90,7 +91,7 @@ public class DiskStore {
         if (!Files.exists(tableDir)) {
             return;
         }
-        try (var walk = Files.walk(tableDir)) {
+        try (Stream<Path> walk = Files.walk(tableDir)) {
             List<Path> paths = new ArrayList<>();
             walk.forEach(paths::add);
             Collections.reverse(paths);

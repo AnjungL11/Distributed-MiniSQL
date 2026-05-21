@@ -1,0 +1,16 @@
+com\minisql\client\sql\SqlStatementParser$1.class
+com\minisql\client\sql\SqlStatement.class
+com\minisql\client\sql\SqlStatementParser$MatchResult.class
+com\minisql\client\rpc\MasterRpcClient.class
+com\minisql\client\MiniSqlClient.class
+com\minisql\client\rpc\RegionRpcClient.class
+com\minisql\client\zk\ActiveMasterResolver.class
+com\minisql\client\sql\SqlOperation.class
+com\minisql\client\ClientMain.class
+com\minisql\client\model\Endpoint.class
+com\minisql\client\model\SqlResult.class
+com\minisql\client\cache\MetadataCache.class
+com\minisql\client\cli\ResultPrinter.class
+com\minisql\client\sql\SqlStatementParser.class
+com\minisql\client\zk\TableMetadataResolver.class
+com\minisql\client\rpc\MasterRpcClient$ClientCall.class
