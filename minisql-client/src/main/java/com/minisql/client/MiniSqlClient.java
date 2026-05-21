@@ -14,6 +14,12 @@ import com.minisql.common.JsonUtil;
 import com.minisql.common.TableSchema;
 import com.minisql.rpc.master.RoutingResponse;
 
+import org.apache.curator.framework.CuratorFramework;
+import org.apache.curator.framework.CuratorFrameworkFactory;
+import org.apache.curator.retry.ExponentialBackoffRetry;
+import org.apache.zookeeper.CreateMode;
+import java.net.InetAddress;
+import java.util.UUID;
 import java.util.Optional;
 
 public class MiniSqlClient implements AutoCloseable {
@@ -23,6 +29,9 @@ public class MiniSqlClient implements AutoCloseable {
     private final RegionRpcClient regionRpcClient;
     private final SqlStatementParser statementParser;
     private final TableMetadataResolver tableMetadataResolver;
+
+    // z增加用于维持客户端临时节点的 ZK 客户端
+    private final CuratorFramework zkClient;
 
     public MiniSqlClient() {
         this(new MetadataCache());
@@ -35,6 +44,32 @@ public class MiniSqlClient implements AutoCloseable {
         this.regionRpcClient = new RegionRpcClient();
         this.statementParser = new SqlStatementParser();
         this.tableMetadataResolver = new TableMetadataResolver(metadataCache);
+
+        // 初始化 ZK 客户端并注册 Client 节点
+        this.zkClient = CuratorFrameworkFactory.builder()
+                .connectString("127.0.0.1:22181")
+                .sessionTimeoutMs(40000)
+                .retryPolicy(new ExponentialBackoffRetry(1000, 3))
+                .namespace("minisql")
+                .build();
+        this.zkClient.start();
+        registerClientNode();
+    }
+
+    // 在 Zookeeper 中注册临时节点
+    private void registerClientNode() {
+        try {
+            String clientIp = InetAddress.getLocalHost().getHostAddress();
+            String clientId = clientIp + "-" + UUID.randomUUID().toString().substring(0, 4);
+            String clientZkPath = "/clients/" + clientId; // 路径
+
+            this.zkClient.create()
+                    .creatingParentsIfNeeded()
+                    .withMode(CreateMode.EPHEMERAL)
+                    .forPath(clientZkPath, "Online".getBytes());
+        } catch (Exception e) {
+            System.err.println("Warning: Failed to register Client to Zookeeper: " + e.getMessage());
+        }
     }
 
     public SqlResult execute(String sql) {
@@ -145,5 +180,10 @@ public class MiniSqlClient implements AutoCloseable {
     public void close() {
         masterResolver.close();
         tableMetadataResolver.close();
+
+        // Client 退出时，安全关闭 ZooKeeper 连接，自动触发临时节点的删除
+        if (zkClient != null) {
+            zkClient.close();
+        }
     }
 }

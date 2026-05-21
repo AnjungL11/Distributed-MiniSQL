@@ -1,0 +1,4 @@
+com\minisql\master\MasterAdvancedTest.class
+com\minisql\master\MasterServiceImpl.class
+com\minisql\master\MasterServer.class
+com\minisql\master\ClusterStatusManager.class

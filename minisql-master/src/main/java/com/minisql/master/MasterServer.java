@@ -73,8 +73,8 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
         String activeMasterAddress = InetAddress.getLocalHost().getHostAddress() + ":" + rpcPort;
         
         try {
-            // 1. 将自己的 RPC 地址写到 ZK 的 /active_master 节点（临时节点）
-            // 如果节点残留则先删除（应对极端僵尸节点情况）
+            // 将自己的 RPC 地址写到 ZK 的 /active_master 节点
+            // 如果节点残留则先删除
             if (client.checkExists().forPath(ZkConstants.ACTIVE_MASTER_PATH) != null) {
                 client.delete().forPath(ZkConstants.ACTIVE_MASTER_PATH);
             }
@@ -86,7 +86,13 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
 
             // 只有当选为 Active Master 的实体，才开启对 Region Server 节点的事件快照同步与监听
             initRegionDirectoryWatcher();
-            // 2. 启动对外服务的 Thrift RPC 服务器
+
+            // 让上面的 Watcher 把存活节点加载进 clusterStatusManager
+            Thread.sleep(500); 
+            
+            // 清理孤儿表
+            reconcileOrphanedTables(client);
+            // 启动对外服务的 Thrift RPC 服务器
             startRpcServer();
 
         } catch (InterruptedException e) {
@@ -98,7 +104,59 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
     }
 
     /**
-     * 开启分布式目录树节点快照监听（感知物理节点动态变动）
+     * 清理遗留的孤儿表
+     */
+    private void reconcileOrphanedTables(CuratorFramework client) {
+        logger.info("开始执行元数据对账：检查是否存在失效的孤儿表...");
+        try {
+            // 获取 ZK 中所有表的名字
+            if (client.checkExists().forPath(ZkConstants.TABLES_ROOT) == null) {
+                return; // 如果还没建过表，直接返回
+            }
+            List<String> tables = client.getChildren().forPath(ZkConstants.TABLES_ROOT);
+            List<String> aliveRegions = client.getChildren().forPath(ZkConstants.REGION_SERVERS_ROOT);
+
+            int orphanCount = 0;
+            for (String tableName : tables) {
+                String tablePath = ZkConstants.getTablePath(tableName);
+                byte[] data = client.getData().forPath(tablePath);
+                if (data != null && data.length > 0) {
+                    TableSchema schema = JsonUtil.fromJson(new String(data, StandardCharsets.UTF_8), TableSchema.class);
+                    String regionNode = schema.getPrimaryKey();
+
+                    // 如果这张表所属的 Region 已经不在存活列表里了
+                    if (!aliveRegions.contains(regionNode)) {
+                        logger.warn("🚨 发现孤儿表 [{}] (原属节点 {} 已离线)，准备重新分配...", tableName, regionNode);
+                        
+                        String newBestNode = clusterStatusManager.getLowestLoadNode();
+                        // 如果负载均衡器还没预热好
+                        if (newBestNode == null && !aliveRegions.isEmpty()) {
+                            newBestNode = aliveRegions.get(0);
+                        }
+
+                        if (newBestNode != null) {
+                            schema.setPrimaryKey(newBestNode);
+                            client.setData().forPath(tablePath, JsonUtil.toJson(schema).getBytes(StandardCharsets.UTF_8));
+                            logger.info("✨ 对账修复成功：表 [{}] 已重新分配至健康节点 {}", tableName, newBestNode);
+                            orphanCount++;
+                        } else {
+                            logger.error("❌ 无法修复表 [{}]，当前集群没有任何存活的 Region 节点！", tableName);
+                        }
+                    }
+                }
+            }
+            if (orphanCount == 0) {
+                logger.info("✅ 元数据对账完成：所有表状态健康，无遗留孤儿表。");
+            } else {
+                logger.info("✅ 元数据对账完成：共修复了 {} 张孤儿表。", orphanCount);
+            }
+        } catch (Exception e) {
+            logger.error("元数据对账执行异常", e);
+        }
+    }
+
+    /**
+     * 开启分布式目录树节点快照监听
      */
     private void initRegionDirectoryWatcher() {
         regionDirCache = CuratorCache.build(zkClient.getClient(), ZkConstants.REGION_SERVERS_ROOT);
@@ -107,6 +165,10 @@ public class MasterServer extends LeaderSelectorListenerAdapter {
                     String nodeName = parseZNodeName(childData.getPath());
                     if (!nodeName.isEmpty()) {
                         clusterStatusManager.addNode(nodeName);
+
+                        logger.info("监控到新 Region 节点上线: {}", nodeName);
+                        // 孤儿表分配
+                        reconcileOrphanedTables(zkClient.getClient());
                     }
                 })
                 .forDeletes(childData -> {
